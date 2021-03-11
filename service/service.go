@@ -22,6 +22,10 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		s.AddScore(w, req)
 		return
 	}
+	if req.Method == http.MethodPut {
+		s.UpdateScore(w, req)
+		return
+	}
 	if strings.HasPrefix(req.URL.Path, "/scores/top") {
 		s.Top(w, req)
 		return
@@ -37,6 +41,11 @@ type Score struct {
 	Total int
 }
 
+type ScoreUpdate struct {
+	User  int
+	Score int
+}
+
 func (s *Service) AddScore(w http.ResponseWriter, req *http.Request) {
 	var score Score
 	if err := json.NewDecoder(req.Body).Decode(&score); err != nil {
@@ -44,11 +53,34 @@ func (s *Service) AddScore(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if score.User <= 0 {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+		http.Error(w, "Invalid user id", http.StatusBadRequest)
 		return
 	}
-	s.scores.Add(scores.Score{UserID: score.User, Value: score.Total})
-	return
+	if err := s.scores.Add(scores.Score{User: score.User, Value: score.Total}); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+}
+
+func (s *Service) UpdateScore(w http.ResponseWriter, req *http.Request) {
+	var score ScoreUpdate
+	if err := json.NewDecoder(req.Body).Decode(&score); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if score.User <= 0 {
+		http.Error(w, "Invalid user id", http.StatusBadRequest)
+		return
+	}
+	newScore, err := s.scores.Update(scores.Score{User: score.User, Value: score.Score})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(Score{User: score.User, Total: newScore.Value}); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Service) Top(w http.ResponseWriter, req *http.Request) {

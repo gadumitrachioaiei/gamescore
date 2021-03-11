@@ -1,6 +1,7 @@
 package scores
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -10,27 +11,33 @@ import (
 //
 // Thread safe.
 type Scores struct {
-	mu   sync.Mutex
-	root *Node
+	mu    sync.Mutex
+	root  *Node
+	users map[int]*Node // map users to their node in the tree
 }
 
 // New returns a new Scores object
 func New() *Scores {
-	return &Scores{}
+	return &Scores{users: make(map[int]*Node)}
 }
 
 // Add adds a new score for the user in the s tree
-func (s *Scores) Add(score Score) {
+func (s *Scores) Add(score Score) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, ok := s.users[score.User]; ok {
+		return fmt.Errorf("Existing user: %d", score.User)
+	}
 	if s.root == nil {
 		s.root = &Node{
-			score:  score.Value,
-			userID: score.UserID,
+			score: score.Value,
+			user:  score.User,
 		}
-		return
+		s.users[score.User] = s.root
+		return nil
 	}
-	s.root.Add(score)
+	s.users[score.User] = s.root.Add(score)
+	return nil
 }
 
 // Top returns top scores in descending order.
@@ -58,30 +65,30 @@ func (s *Scores) Range(position int, count int) []Score {
 // Node is a node for our scores tree.
 type Node struct {
 	score        int   // score of the user, used as key in our tree
-	userID       int   // user that had the above score, used as value in our tree
+	user         int   // user that had the above score, used as value in our tree
 	left, right  *Node // left and right children
 	lsize, rsize int   // left and right subtree size
+	parent       *Node // we need this so we can walk the tree upwards
 }
 
 // Score represents a score, to be added or returned from our tree.
 type Score struct {
-	UserID int
-	Value  int
+	User  int
+	Value int
+}
+
+func (s *Node) String() string {
+	return fmt.Sprintf("user: %d, score: %d, left: %d, right: %d\n", s.user, s.score, s.lsize, s.rsize)
 }
 
 // Add adds a new score for the user in the s tree.
-func (s *Node) Add(score Score) {
+func (s *Node) Add(score Score) *Node {
 	if score.Value < s.score {
 		s.lsize++
-		s.left.add(score, s)
-		return
+		return s.left.add(score, s)
 	}
 	s.rsize++
-	s.right.add(score, s)
-}
-
-func (s *Node) Update(score Score, rank int) int {
-	return 0
+	return s.right.add(score, s)
 }
 
 // Top returns top scores, in descending order.
@@ -98,7 +105,7 @@ func (s *Node) Top(top int) []Score {
 	if s.right != nil {
 		s.right.inOrderReverse(&scores)
 	}
-	scores = append(scores, Score{s.userID, s.score})
+	scores = append(scores, Score{s.user, s.score})
 	if top == s.rsize+1 || s.left == nil {
 		return scores
 	}
@@ -142,8 +149,8 @@ func (s *Node) search(startRank, startPos, endPos int, scores *[]Score) {
 	}
 	if nodeRank >= startPos && nodeRank <= endPos {
 		*scores = append(*scores, Score{
-			UserID: s.userID,
-			Value:  s.score,
+			User:  s.user,
+			Value: s.score,
 		})
 	}
 	if s.lsize > 0 {
@@ -160,29 +167,30 @@ func (s *Node) inOrderReverse(users *[]Score) {
 		s.right.inOrderReverse(users)
 	}
 	*users = append(*users, Score{
-		UserID: s.userID,
-		Value:  s.score,
+		User:  s.user,
+		Value: s.score,
 	})
 	if s.left != nil {
 		s.left.inOrderReverse(users)
 	}
 }
 
-// add adds a new score for the user in the s tree, or attached directly to the parent
-func (s *Node) add(user Score, parent *Node) {
+// add adds a new score in the s tree, or attached directly to the parent
+func (s *Node) add(score Score, parent *Node) *Node {
 	if s != nil {
-		s.Add(user)
-		return
+		return s.Add(score)
 	}
 	newScore := &Node{
-		score:  user.Value,
-		userID: user.UserID,
+		score:  score.Value,
+		user:   score.User,
+		parent: parent,
 	}
-	if user.Value < parent.score {
+	if score.Value < parent.score {
 		parent.left = newScore
-		return
+	} else {
+		parent.right = newScore
 	}
-	parent.right = newScore
+	return newScore
 }
 
 // intersection returns the intersection between two intervals.

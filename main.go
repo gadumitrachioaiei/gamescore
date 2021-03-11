@@ -14,7 +14,7 @@ var address = flag.String("address", "", "Address for the api")
 func main() {
 	flag.Parse()
 	if *address == "" {
-		log.Fatal("Missing address paramater, see help")
+		log.Fatal("Missing address parameter, see help")
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/scores/", service.New())

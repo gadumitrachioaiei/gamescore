@@ -8,6 +8,27 @@ import (
 	"time"
 )
 
+// TestScoresBST tests that the scrores form an BST tree,
+// checking that inorder reverse produces the scores in descending order.
+func TestScoresBST(t *testing.T) {
+	s := New()
+	_, sortedScores := generateScores(s)
+	var scores []Score
+	var inOrder func(node *Node)
+	inOrder = func(node *Node) {
+		if node == nil {
+			return
+		}
+		inOrder(node.right)
+		scores = append(scores, Score{User: node.user, Value: node.score})
+		inOrder(node.left)
+	}
+	inOrder(s.root)
+	if !reflect.DeepEqual(scores, sortedScores) {
+		t.Fatalf("got scores:\n%v\n, expected:\n%v\n", scores, sortedScores)
+	}
+}
+
 // TestScoresRange tests Range scores.
 func TestScoresRange(t *testing.T) {
 	type testCase struct {
@@ -93,8 +114,8 @@ func generateScores(t *Scores) ([]Score, []Score) {
 	var scores []Score
 	for i := 0; i < 10; i++ {
 		score := Score{
-			UserID: i,
-			Value:  random.Intn(10),
+			User:  i,
+			Value: random.Intn(10),
 		}
 		scores = append(scores, score)
 		t.Add(score)
