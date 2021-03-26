@@ -1,7 +1,9 @@
 package scores
 
 import (
+	"fmt"
 	"math/rand"
+	"os/exec"
 	"reflect"
 	"sort"
 	"testing"
@@ -13,20 +15,9 @@ import (
 func TestScoresBST(t *testing.T) {
 	s := New()
 	_, sortedScores := generateScores(s)
-	var scores []Score
-	var inOrder func(node *Node)
-	inOrder = func(node *Node) {
-		if node == nil {
-			return
-		}
-		inOrder(node.right)
-		scores = append(scores, Score{User: node.user, Value: node.score})
-		inOrder(node.left)
-	}
-	inOrder(s.root)
-	if !reflect.DeepEqual(scores, sortedScores) {
-		t.Fatalf("got scores:\n%v\n, expected:\n%v\n", scores, sortedScores)
-	}
+	fmt.Println(s.root.ToAscii())
+	fmt.Println(s.root.ToDot())
+	assertBST(t, s, sortedScores)
 }
 
 // TestScoresRange tests Range scores.
@@ -108,6 +99,61 @@ func TestScoresTopRandom(t *testing.T) {
 	}
 }
 
+func TestUpdateRoot(t *testing.T) {
+	s := New()
+	s.Add(Score{User: 1, Value: 2})
+	s.Add(Score{User: 2, Value: 1})
+	s.Add(Score{User: 3, Value: 10})
+	s.Add(Score{User: 4, Value: 8})
+	s.Add(Score{User: 5, Value: 9})
+	s.Add(Score{User: 6, Value: 6})
+	s.Add(Score{User: 7, Value: 7})
+	//fmt.Println(s.root.ToDot())
+	text := s.root.ToDot()
+	fmt.Println(text)
+	comm := fmt.Sprintf(`echo '%s' | graph-easy --as_box`, text)
+	fmt.Println(comm)
+	result, err := exec.Command("bash", "-c", comm).CombinedOutput()
+	if err != nil {
+		t.Fatal(err, string(result))
+	}
+	fmt.Println(string(result))
+	fmt.Println(s.root.ToAscii())
+	//spew.Config.Indent = "\t"
+	//spew.Dump(s.root)
+}
+
+// assertTree asserts that a tree
+func assertTreeUpdate(t *testing.T, s *Scores, score Score) {
+	sortedScores := inOrder(s.root)
+	sortedScores = updateSortedScores(sortedScores, score)
+	newScore, err := s.Update(score)
+	if err != nil {
+		t.Fatalf("updating existing user: %v", err)
+	}
+	expected := Score{User: 1, Value: 2}
+	if newScore != expected {
+		t.Fatalf("got new score: %v, expected: %v", newScore, expected)
+	}
+	assertBST(t, s, sortedScores)
+	if node, ok := s.users[score.User]; !(ok && node.score == newScore.Value && node.user == newScore.User) {
+		t.Fatalf("got mapped user score: %v, expected: %v", Score{User: node.user, Value: node.score}, newScore)
+	}
+}
+
+func updateSortedScores(scores []Score, newScore Score) []Score {
+	for i := 0; i < len(scores); i++ {
+		if scores[i].User == newScore.User {
+			newScore.Value += scores[i].Value
+			scores[i] = scores[len(scores)-1]
+			scores = scores[:len(scores)-1]
+			break
+		}
+	}
+	scores = append(scores, newScore)
+	return sortScores(scores)
+}
+
 // generateScores attaches 10 random scores to the tree and returns them together with a sorted copy.
 func generateScores(t *Scores) ([]Score, []Score) {
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -144,4 +190,21 @@ func sortScores(scores []Score) []Score {
 		sortedScores[i] = scoresWithIndex[i].Score
 	}
 	return sortedScores
+}
+
+func assertBST(t *testing.T, s *Scores, sortedScores []Score) {
+	scores := inOrder(s.root)
+	if !reflect.DeepEqual(scores, sortedScores) {
+		t.Fatalf("got scores:\n%v\n, expected:\n%v\n", scores, sortedScores)
+	}
+}
+
+func inOrder(node *Node) []Score {
+	if node == nil {
+		return nil
+	}
+	scores := inOrder(node.right)
+	scores = append(scores, Score{User: node.user, Value: node.score})
+	scores = append(scores, inOrder(node.left)...)
+	return scores
 }

@@ -1,8 +1,12 @@
 package scores
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
+
+	"github.com/gadumitrachioaiei/gamescore/bintree2ascii"
 )
 
 // Scores stores scores for our game and can answer queries about them.
@@ -77,8 +81,68 @@ type Score struct {
 	Value int
 }
 
-func (s *Node) String() string {
-	return fmt.Sprintf("user: %d, score: %d, left: %d, right: %d\n", s.user, s.score, s.lsize, s.rsize)
+func (s *Node) MarshalJSON() ([]byte, error) {
+	type TreeNode struct {
+		Name      string    `json:"name"`
+		Left      *TreeNode `json:"left"`
+		Right     *TreeNode `json:"right"`
+		LeftEdge  string    `json:"leftEdge"`
+		RightEdge string    `json:"rightEdge"`
+	}
+	var toTreeNode func(*Node) *TreeNode
+	toTreeNode = func(s *Node) *TreeNode {
+		if s == nil {
+			return nil
+		}
+		return &TreeNode{
+			Name:      s.Key(),
+			Left:      toTreeNode(s.left),
+			Right:     toTreeNode(s.right),
+			LeftEdge:  s.LeftEdge(),
+			RightEdge: s.RightEdge(),
+		}
+	}
+	return json.Marshal(toTreeNode(s))
+}
+
+func (s *Node) ToAscii() string {
+	at := bintree2ascii.NewAsciiTree(bintree2ascii.Config{
+		NodeWidth:  4,
+		NodeHeight: 1,
+		EdgeHeight: 3,
+		Distance:   2,
+		Sep:        1,
+	})
+	at.FromInterface(s)
+	return string(at.Draw())
+}
+
+func (s *Node) ToDot() string {
+	var buf strings.Builder
+	buf.WriteString("digraph { ")
+	q := []*Node{s}
+	for len(q) > 0 {
+		n := q[0]
+		if n.left != nil {
+			q = append(q, n.left)
+			buf.WriteString(edgeToDot(n, n.left))
+		}
+		if n.right != nil {
+			q = append(q, n.right)
+			buf.WriteString(edgeToDot(n, n.right))
+		}
+		q = q[1:]
+	}
+	buf.WriteString("}")
+	return buf.String()
+}
+
+func edgeToDot(n1, n2 *Node) string {
+	label := n1.rsize
+	if n1.left != nil && n1.left.user == n2.user {
+		label = n1.lsize
+	}
+	return fmt.Sprintf(`"s%du%d" -> "s%du%d"[label="%d"]; `, n1.score, n1.user, n2.score, n2.user, label)
 }
 
 // Add adds a new score for the user in the s tree.

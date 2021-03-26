@@ -52,38 +52,18 @@ func (s *Scores) updateRoot(score Score) (Score, error) {
 func (s *Node) replace() *Node {
 	defer s.nullify()
 	if s.left == nil && s.right == nil {
-		s.replaceLeaf()
+		replaceParentConnection(s, nil)
 		return nil
-	} else if s.left == nil {
-		return s.replaceWith(s.right)
-	} else if s.right == nil {
-		return s.replaceWith(s.left)
+	}
+	if s.left == nil {
+		replaceParentConnection(s, s.right)
+		return s.right
+	}
+	if s.right == nil {
+		replaceParentConnection(s, s.left)
+		return s.left
 	}
 	return s.replaceWithDescendant()
-}
-
-// replaceLeaf replaces this leaf node.
-func (s *Node) replaceLeaf() {
-	defer s.parent.decrementSize()
-	if s.parent.left != nil && s.parent.left.user == s.user {
-		s.parent.left = nil
-		s.parent.lsize = 0
-		return
-	}
-	s.parent.right = nil
-	s.parent.rsize = 0
-}
-
-// replaceWithRight replaces this node with the given node.
-// returns the new node.
-func (s *Node) replaceWith(n *Node) *Node {
-	if s.parent.left != nil && s.parent.left.user == s.user {
-		s.parent.left = n
-	} else {
-		s.parent.right = n
-	}
-	n.decrementSize()
-	return n
 }
 
 // right replaces this node from the tree with a new one such that BST property is preserved.
@@ -93,46 +73,33 @@ func (s *Node) replaceWith(n *Node) *Node {
 // The node must have both children.
 func (s *Node) replaceWithDescendant() *Node {
 	defer s.nullify()
-	replacer := s.right.walkLeft()
 	if s.right.left == nil {
-		replacer = s.right
-		s.right.left = s.left
-		s.right.lsize = s.lsize
-		s.decrementSize()
-	} else {
-		// its right tree becomes replacer of the parent
-		replacer.parent.left = replacer.right
-		replacer.parent.lsize -= 1
-		replacer.parent.decrementSize()
-		// its right tree is set to be node's right
-		replacer.right = s.right
-		// its replacer tree is set to be node's replacer
+		replacer := s.right
 		replacer.left = s.left
 		replacer.lsize = s.lsize
-		replacer.rsize = s.rsize
-	}
-	if s.parent != nil {
-		if s.parent.left != nil && s.parent.left.user == s.user {
-			s.parent.left = replacer
-		} else {
-			s.parent.right = replacer
+		if s.parent != nil {
+			replaceParentConnection(s, replacer)
 		}
+		return replacer
 	}
+	replacer := s.right.walkLeft()
+	replaceParentConnection(replacer, replacer.right)
+	replaceNode(s, replacer)
 	return replacer
 }
 
-// decrementSize decrements size of ancestors of this node.
-func (s *Node) decrementSize() {
-	if s.parent == nil {
+// subtractSize subtracts size from ancestors of this node.
+func (s *Node) subtractSize(size int) {
+	if size == 0 || s.parent == nil {
 		return
 	}
 	// identify if the parent is to the left or right
 	if s.parent.left != nil && s.parent.left.user == s.user {
-		s.parent.lsize -= 1
+		s.parent.lsize -= size
 	} else {
-		s.parent.rsize -= 1
+		s.parent.rsize -= size
 	}
-	s.parent.decrementSize()
+	s.parent.subtractSize(size)
 }
 
 // walkLeft walks to the left of this node all the way and returns the last node.
@@ -148,4 +115,34 @@ func (s *Node) walkLeft() *Node {
 // You may need to call this method after you remove the node from the tree.
 func (s *Node) nullify() {
 	s.left, s.right, s.parent = nil, nil, nil
+}
+
+// replaceParentConnection replaces the connection between s's parent to s with s's parent to newChild.
+// we assume that s has a parent.
+func replaceParentConnection(s *Node, newChild *Node) {
+	var newSize int
+	if newChild != nil {
+		newSize = newChild.lsize + newChild.rsize + 1
+	}
+	subtractedSize := s.parent.lsize + s.parent.rsize
+	if s.parent.left != nil && s.parent.left.user == s.user {
+		s.parent.left = newChild
+		s.parent.lsize = newSize
+		return
+	}
+	s.parent.right = newChild
+	s.parent.rsize = newSize
+	s.parent.subtractSize(subtractedSize - (s.parent.lsize + s.parent.rsize))
+}
+
+// replaceNode replaces node s with node n.
+// you need to make sure after this call,
+func replaceNode(s *Node, n *Node) {
+	n.right = s.right
+	n.rsize = s.rsize
+	n.left = s.left
+	n.lsize = s.lsize
+	if s.parent != nil {
+		replaceParentConnection(s, n)
+	}
 }
